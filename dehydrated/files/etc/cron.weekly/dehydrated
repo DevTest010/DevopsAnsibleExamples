@@ -1,0 +1,2 @@
+#!/bin/bash
+sudo -u dehydrated /home/dehydrated/dehydrated/dehydrated --cron

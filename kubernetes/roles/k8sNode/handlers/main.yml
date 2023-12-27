@@ -1,0 +1,15 @@
+---
+
+- name: restart docker
+  systemd:
+    name: docker
+    state: restarted
+
+- name: hold k8s packages
+  dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  with_items:
+    - kubelet
+    - kubeadm
+    - kubectl

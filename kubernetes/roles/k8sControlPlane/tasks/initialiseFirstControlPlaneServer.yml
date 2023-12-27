@@ -1,0 +1,65 @@
+---
+
+- name: msg - {{ k8s_control_plane_ip }}
+  ansible.builtin.debug:
+    msg: "{{ k8s_control_plane_ip }}"
+
+- name: msg - kubeadm_init_result.stdout.find("kubeadm join")
+  ansible.builtin.debug:
+    msg: "kubeadm_init_result.stdout.find('kubeadm join')"
+
+- name: initialise kubernetes cluster [kubeadm init]
+  become: true
+  ansible.builtin.shell: |
+    kubeadm init \
+      --control-plane-endpoint {{ k8s_control_plane_ip }}:6443 \
+      --pod-network-cidr=192.168.0.0/24 \
+  register: kubeadm_init_result
+  failed_when: kubeadm_init_result.stdout.find("kubeadm join") == -1
+
+- name: record kubeadm init stdout
+  become: true
+  ansible.builtin.copy:
+    content: "{{ kubeadm_init_result.stdout }}"
+    dest: "/etc/kubernetes/kubeadm-init.stdout"
+
+- name: record kubeadm init stderr
+  become: true
+  ansible.builtin.copy:
+    content: "{{ kubeadm_init_result.stderr }}"
+    dest: "/etc/kubernetes/kubeadm-init.stderr"
+
+- name: wait until the number of "ready" pods is five
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  ansible.builtin.shell: kubectl get pods --field-selector=status.phase=Running --namespace kube-system --no-headers
+  register: node_status
+  until: node_status.stdout_lines | length == 5
+  delay: 10
+  retries: 30
+
+- name: create .kube config folder for ansible user
+  ansible.builtin.file:
+    path: "~{{ ansible_ssh_user }}/.kube"
+    state: directory
+    owner: "{{ ansible_ssh_user }}"
+
+- name: copy admin.conf to .kube folder
+  ansible.builtin.copy:
+    src: /etc/kubernetes/admin.conf
+    dest: "~{{ ansible_ssh_user }}/.kube/config"
+    owner: "{{ ansible_ssh_user }}"
+    remote_src: yes
+
+- name: create .kube folder config folder for root user
+  ansible.builtin.file:
+    path: "/root/.kube"
+    state: directory
+    owner: "root"
+
+- name: copy admin.conf to .kube folder
+  ansible.builtin.copy:
+    src: /etc/kubernetes/admin.conf
+    dest: "/root/.kube/config"
+    owner: "root"
+    remote_src: yes

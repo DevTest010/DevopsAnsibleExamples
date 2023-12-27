@@ -1,0 +1,40 @@
+---
+
+- name: create kubernetes pki directory
+  file:
+    path: /etc/kubernetes/pki
+    state: directory
+
+- name: obtain join string from kubernetes control plane
+  delegate_to: "{{ k8s_control_plane_ip }}"
+  ansible.builtin.shell:
+    cmd: kubeadm token create --print-join-command --ttl=1h
+  register: kubeadm_join_string
+
+
+- name: join kubernetes cluster [kubeadm join]
+  ansible.builtin.shell:
+    cmd: "{{ kubeadm_join_string.stdout }}"
+  register: kubeadm_join_result
+
+- name: record kubeadm join stdout
+  ansible.builtin.copy:
+    content: "{{ kubeadm_join_result.stdout }}"
+    dest: "/etc/kubernetes/kubeadm-join.stdout"
+
+- name: record kubeadm join stderr
+  ansible.builtin.copy:
+    content: "{{ kubeadm_join_result.stderr }}"
+    dest: "/etc/kubernetes/kubeadm-join.stderr"
+
+- name: wait until node is in ready state
+  delegate_to: "{{ k8s_control_plane_ip }}"
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  ansible.builtin.shell:
+    cmd: |
+      kubectl get nodes {{ ansible_hostname }} --no-headers -o custom-columns=STATUS:status.conditions\[\?\(\@.type==\"Ready\"\)\].status
+  register: node_status
+  until: node_status.stdout == 'True'
+  delay: 10
+  retries: 30

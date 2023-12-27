@@ -1,0 +1,26 @@
+---
+
+- name: determine server number
+  set_fact:
+    server_number: "{{ ansible_facts['hostname'][-2:] }}"
+
+- name: determine control plane fqdn
+  set_fact:
+    initial_control_plane_fqdn: "{{ ansible_facts['hostname'][ : ansible_facts['hostname'] | length - 2 ] }}.{{ ansible_facts['domain'] }}"
+
+- name: get control plane IP address
+  set_fact:
+    k8s_control_plane_ip: "{{ ansible_all_ipv4_addresses }}" #"{{ lookup('community.general.dig',  initial_control_plane_fqdn) }}"
+
+- name: determine name of initial control plane server
+  set_fact:
+    initial_control_plane_server: "{{ ansible_facts['hostname'][ : ansible_facts['hostname'] | length - 2 ] }}01"
+
+- name: determine vrrp priority
+  set_fact:
+    vrrp_priority: "{{ 255 - (( server_number|int - 1) * 50) }}"
+
+- name: check whether contol plane is initialised
+  stat:
+    path: /etc/kubernetes/pki/ca.key
+  register: k8s_ca

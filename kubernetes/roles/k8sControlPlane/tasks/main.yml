@@ -1,0 +1,14 @@
+---
+
+- include_tasks: setAdditionalFacts.yml
+- include_tasks: packages.yml
+- include_tasks: installAndConfigureKeepalived.yml
+- include_tasks: installAndConfigureHAProxy.yml
+- include_tasks: installAndConfigureDocker.yml
+- include_tasks: installAndConfigureKubernetes.yml
+- include_tasks: initialiseFirstControlPlaneServer.yml
+  when: server_number == '01' and not k8s_ca.stat.exists
+- include_tasks: installAndConfigureCalico.yml
+  when: server_number == '01' and not k8s_ca.stat.exists
+- include_tasks: joinAdditionalControlPlaneServer.yml
+  when: server_number != '01' and not k8s_ca.stat.exists

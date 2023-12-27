@@ -1,0 +1,52 @@
+---
+
+- name: load br_netfilter kernel module on boot
+  become: true
+  ansible.builtin.copy:
+    src: files/etc/modules-load.d/k8s.conf
+    dest: /etc/modules-load.d/k8s.conf
+
+- name: load br_netfilter kernel module
+  become: true
+  community.general.modprobe:
+    name: br_netfilter
+    state: present
+
+- name: let iptables see bridged traffic
+  become: true
+  ansible.builtin.copy:
+    src: files/etc/sysctl.d/k8s.conf
+    dest: /etc/sysctl.d/k8s.conf
+  register: sysctlConfigured
+
+- name: apply sysctl changes
+  become: true
+  command: 'sysctl --system'
+  when: sysctlConfigured.changed
+
+- name: add k8s gpg key
+  become: true
+  ansible.builtin.shell:
+    cmd: curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor > /usr/share/keyrings/kubernetes-archive-keyring.gpg
+    creates: /usr/share/keyrings/kubernetes-archive-keyring.gpg
+
+- name: add K8s repository
+  become: true
+  ansible.builtin.apt_repository:
+    repo: deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main
+    state: present
+    update_cache: yes
+
+- name: install k8s packages
+  become: true
+  ansible.builtin.apt:
+    name: "{{ packages }}"
+    state: present
+    update_cache: yes
+    cache_valid_time: 3600
+  vars:
+    packages:
+    - kubelet
+    - kubeadm
+    - kubectl
+  notify: hold k8s packages

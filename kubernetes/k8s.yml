@@ -1,0 +1,11 @@
+---
+
+- name: apply Kubernetes Control Plane configuration to Kubernetes Control Plane servers
+  hosts: k8sControlPlanes
+  roles:
+  - k8sControlPlane
+
+- name: apply Kubernetes node configuration to Kubernetes Node servers
+  hosts: k8sNodes
+  roles:
+  - k8sNode

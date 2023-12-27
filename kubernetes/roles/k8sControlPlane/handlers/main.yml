@@ -1,0 +1,22 @@
+---
+
+- name: restart docker
+  systemd:
+    name: docker
+    state: restarted
+
+- name: hold k8s packages
+  dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  with_items:
+    - kubelet
+    - kubeadm
+    - kubectl
+
+- name: remove local copy of pki certs
+  delegate_to: localhost
+  become: false
+  file:
+    path: /temp/pki
+    state: absent

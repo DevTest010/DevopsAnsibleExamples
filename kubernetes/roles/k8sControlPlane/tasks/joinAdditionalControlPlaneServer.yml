@@ -1,0 +1,116 @@
+---
+
+- name: create kubernetes pki directory
+  become: true
+  ansible.builtin.file:
+    path: /etc/kubernetes/pki/etcd
+    state: directory
+
+- name: fetch pki certs/keys from first control plane server
+  become: true
+  delegate_to: "{{ initial_control_plane_server }}"
+  ansible.builtin.fetch:
+    src: /etc/kubernetes/pki/{{ item }}
+    dest: /tmp/pki/
+    flat: yes
+  with_items:
+    - ca.crt
+    - ca.key
+    - sa.pub
+    - sa.key
+    - front-proxy-ca.crt
+    - front-proxy-ca.key
+  notify: remove local copy of pki certs
+
+- name: fetch etcd pki certs/keys from first control plane server
+  become: true
+  delegate_to: "{{ initial_control_plane_server }}"
+  ansible.builtin.fetch:
+    src: /etc/kubernetes/pki/etcd/{{ item }}
+    dest: /tmp/pki/etcd/
+    flat: yes
+  with_items:
+    - ca.crt
+    - ca.key
+  notify: remove local copy of pki certs
+
+- name: copy pki certs/keys to additional control plane server
+  become: true
+  ansible.builtin.copy: 
+    src: /tmp/pki/{{ item }}
+    dest: /etc/kubernetes/pki/{{item}}
+  with_items:
+    - ca.crt
+    - ca.key
+    - sa.pub
+    - sa.key
+    - front-proxy-ca.crt
+    - front-proxy-ca.key
+
+- name: copy etcd pki certs/keys to additional control plane server 
+  become: true
+  ansible.builtin.copy:
+    src: /tmp/pki/etcd/{{ item }}
+    dest: /etc/kubernetes/pki/etcd/{{ item }}
+  with_items:
+    - ca.crt
+    - ca.key
+
+- name: obtain join string from initial control plane server
+  become: true
+  delegate_to: "{{ initial_control_plane_server }}"
+  ansible.builtin.shell:
+    cmd: kubeadm token create --print-join-command --ttl=1h
+  register: kubeadm_join_string
+
+- name: join kubernetes cluster [kubeadm join]
+  ansible.builtin.shell:
+    cmd: "{{ kubeadm_join_string.stdout }} --control-plane"
+  register: kubeadm_join_result
+
+- name: record kubeadm join stdout
+  ansible.builtin.copy:
+    content: "{{ kubeadm_join_result.stdout }}"
+    dest: "/etc/kubernetes/kubeadm-join.stdout"
+
+- name: record kubeadm join stderr
+  ansible.builtin.copy:
+    content: "{{ kubeadm_join_result.stderr }}"
+    dest: "/etc/kubernetes/kubeadm-join.stderr"
+
+- name: wait until node is in ready state
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  ansible.builtin.shell:
+    cmd: |
+      kubectl get nodes {{ ansible_hostname }} --no-headers -o custom-columns=STATUS:status.conditions\[\?\(\@.type==\"Ready\"\)\].status
+  register: node_status
+  until: node_status.stdout == 'True'
+  delay: 10
+  retries: 30
+
+- name: create .kube config folder for ansible user
+  ansible.builtin.file:
+    path: "~{{ ansible_ssh_user }}/.kube"
+    state: directory
+    owner: "{{ ansible_ssh_user }}"
+
+- name: copy admin.conf to .kube folder
+  ansible.builtin.copy:
+    src: /etc/kubernetes/admin.conf
+    dest: "~{{ ansible_ssh_user }}/.kube/config"
+    owner: "{{ ansible_ssh_user }}"
+    remote_src: yes
+
+- name: create .kube folder config folder for root user
+  ansible.builtin.file:
+    path: "/root/.kube"
+    state: directory
+    owner: "root"
+
+- name: copy admin.conf to .kube folder
+  ansible.builtin.copy:
+    src: /etc/kubernetes/admin.conf
+    dest: "/root/.kube/config"
+    owner: "root"
+    remote_src: yes

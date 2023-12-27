@@ -1,0 +1,39 @@
+---
+
+- name: add docker-ce gpg key
+  become: true
+  ansible.builtin.shell:
+    cmd: "curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor > /usr/share/keyrings/docker-ce-archive-keyring.gpg"
+    creates: "/usr/share/keyrings/docker-ce-archive-keyring.gpg"
+
+- name: Add Docker APT repository
+  become: true
+  apt_repository:
+    repo: deb [arch=amd64] https://download.docker.com/{{ ansible_system | lower }}/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable
+
+
+- name: create /etc/docker directory
+  become: true
+  ansible.builtin.file:
+    path: /etc/docker
+    state: directory
+
+- name: Make docker use systemd to manage cgroups
+  become: true
+  ansible.builtin.copy:
+    src: files/etc/docker/daemon.json
+    dest: /etc/docker/daemon.json
+  notify: restart docker
+
+- name: install docker community edition
+  become: true  
+  ansible.builtin.apt:
+    name: "{{ packages }}"
+    state: present
+    update_cache: yes
+    cache_valid_time: 3600
+  vars:
+    packages:
+    - docker-ce
+    - docker-ce-cli
+    - containerd.io

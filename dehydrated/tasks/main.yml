@@ -1,0 +1,7 @@
+---
+
+- include: packages.yml
+  when: setupDehydrated | bool
+
+- include: installAndConfigureDehydrated.yml
+  when: setupDehydrated | bool

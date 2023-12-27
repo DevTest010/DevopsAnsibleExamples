@@ -1,0 +1,1 @@
+myfirstdomain.example.com myseconddomain.example.com

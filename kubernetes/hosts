@@ -1,0 +1,10 @@
+[k8sControlPlanes]
+k8scp01
+k8scp02
+k8scp03
+
+[k8sNodes]
+k8s01
+k8s02
+k8s03
+

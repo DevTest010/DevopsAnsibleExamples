@@ -1,0 +1,30 @@
+---
+
+- name: install haproxy
+  become: true
+  ansible.builtin.apt:
+    name: "{{ packages }}"
+    state: present
+    update_cache: yes
+    cache_valid_time: 3600
+  vars:
+    packages:
+    - haproxy
+
+- name: copy haproxy configuration
+  become: true
+  ansible.builtin.template:
+    src: "templates/etc/haproxy/haproxy.cfg.j2"
+    dest: "/etc/haproxy/haproxy.cfg"
+  register: haproxyConfigured
+
+# Using a handler we can't guarantee
+# that configuration is applied
+# before it is needed. Hence...
+
+- name: restart haproxy
+  become: true
+  ansible.builtin.systemd:
+    name: haproxy
+    state: restarted
+  when: haproxyConfigured.changed

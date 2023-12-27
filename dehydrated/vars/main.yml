@@ -1,0 +1,5 @@
+---
+
+setupDehydrated: true
+acme_contact_email: foo@example.com
+nginxPackage: nginx-light

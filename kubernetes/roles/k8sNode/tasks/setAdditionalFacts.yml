@@ -1,0 +1,22 @@
+---
+
+- name: determine control plane fqdn
+  set_fact:
+    initial_control_plane_fqdn: "{{ ansible_facts['hostname'][ : ansible_facts['hostname'] | length - 2 ] }}cp01.{{ ansible_facts['domain'] }}"
+
+- name: msg
+  ansible.builtin.debug:
+    msg: "{{ ansible_facts['hostname'][ : ansible_facts['hostname'] | length - 2 ] }}cp01.{{ ansible_facts['domain'] }}"
+  
+- name: msg
+  ansible.builtin.debug:
+    msg: "{{ lookup('community.general.dig',  initial_control_plane_fqdn) }}"
+
+- name: get control plane IP address
+  set_fact:
+    k8s_control_plane_ip: "{{ lookup('community.general.dig',  initial_control_plane_fqdn) }}"
+
+- name: check whether node is initialised
+  stat:
+    path: /etc/kubernetes/pki/ca.crt
+  register: k8s_ca

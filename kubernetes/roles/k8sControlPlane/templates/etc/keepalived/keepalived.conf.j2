@@ -1,0 +1,25 @@
+global_defs {
+}
+
+vrrp_script haproxyIsRunning {
+	script       "killall -0 haproxy"
+	timeout 3
+	interval 3
+	rise 5
+	fall 5
+}
+
+vrrp_instance k8scp {
+	state BACKUP
+	interface {{ ansible_default_ipv4['interface'] }}
+	virtual_router_id 91
+	priority {{ vrrp_priority }}
+	nopreempt
+	advert_int 1
+	virtual_ipaddress {
+		{{ k8s_control_plane_ip }}
+	}
+	track_script {
+		haproxyIsRunning
+	}
+}

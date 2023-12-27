@@ -1,0 +1,143 @@
+---
+
+- name: determine whether dehydrated has already been configured
+  ansible.builtin.stat:
+    path: /etc/dehydrated/certs
+  register: dehydrated_certs_directory
+
+- name: create dehydrated group
+  ansible.builtin.group:
+    name: dehydrated
+
+- name: create dehydrated user
+  ansible.builtin.user:
+    name: dehydrated
+    home: /home/dehydrated
+    group: dehydrated
+
+- name: set paranoid umask for dehydrated user
+  ansible.builtin.lineinfile:
+    dest: /home/dehydrated/.profile
+    regexp: '^#?umask'
+    line: "umask 0077"
+    create: yes
+
+- name: create configuration directory
+  ansible.builtin.file:
+    path: /etc/dehydrated
+    state: directory
+    owner: dehydrated
+    group: dehydrated
+    mode: 0700
+
+- name: copy domains.txt to configuration directory
+  ansible.builtin.copy:
+    src: "{{inventory_hostname_short}}/etc/dehydrated/domains.txt"
+    dest: "/etc/dehydrated/domains.txt"
+    owner: dehydrated
+    group: dehydrated
+
+- name: copy configuration file
+  ansible.builtin.template:
+    src: templates/etc/dehydrated/config
+    dest: /etc/dehydrated/config
+    owner: dehydrated
+    group: dehydrated
+
+- name: create dehydrated accounts folder
+  ansible.builtin.file:
+    path: "/etc/dehydrated/accounts"
+    state: directory
+    owner: dehydrated
+    group: dehydrated
+    mode: 0700
+
+- name: create letsencrypt certificates directory
+  ansible.builtin.file:
+    path: /etc/dehydrated/certs
+    state: directory
+    owner: dehydrated
+    group: dehydrated
+    mode: 0700
+
+- name: create acme-challenges directory /var/www/dehydrated
+  ansible.builtin.file:
+    path: /var/www/dehydrated
+    state: directory
+    owner: dehydrated
+    group: dehydrated
+    mode: 0755
+
+- name: create nginx ssl directory
+  ansible.builtin.file:
+    path: /etc/nginx/ssl
+    state: directory
+    owner: root
+    group: root
+    mode: 0750
+
+- name: update nginx default site to serve the .well-known directory for acme challenges
+  ansible.builtin.copy:
+    src: files/etc/nginx/sites-available/default
+    dest: /etc/nginx/sites-available/default
+    owner: root
+    group: root
+    mode: 0644
+  when: dehydrated_certs_directory.stat.isdir is not defined or (dehydrated_certs_directory.stat.isdir is defined and dehydrated_certs_directory.stat.isdir and dehydrated_certs_directory.stat.nlink < 3)
+
+- name: restart nginx to apply configuration changes
+  ansible.builtin.systemd:
+    name: nginx
+    state: restarted
+  when: dehydrated_certs_directory.stat.isdir is not defined or (dehydrated_certs_directory.stat.isdir is defined and dehydrated_certs_directory.stat.isdir and dehydrated_certs_directory.stat.nlink < 3)
+
+- name: copy dehydrated-hook.sh file
+  ansible.builtin.copy:
+    src: files/usr/local/bin/dehydrated-hook.sh
+    dest: /usr/local/bin/dehydrated-hook.sh
+    owner: root
+    group: dehydrated
+    mode: 0770
+
+- name: clone git repo
+  ansible.builtin.git:
+    repo: https://github.com/dehydrated-io/dehydrated
+    dest: /home/dehydrated/dehydrated
+    accept_hostkey: yes
+    force: true
+
+- name: accept dehydrated terms
+  ansible.builtin.command:
+    cmd: "/home/dehydrated/dehydrated/dehydrated --register --accept-terms"
+  become_user: dehydrated
+  when: dehydrated_certs_directory.stat.isdir is not defined or (dehydrated_certs_directory.stat.isdir is defined and dehydrated_certs_directory.stat.isdir and dehydrated_certs_directory.stat.nlink < 3)
+
+- name: generate certificate
+  ansible.builtin.command:
+    cmd: "/home/dehydrated/dehydrated/dehydrated --cron"
+  become_user: dehydrated
+  register: generate_initial_cert
+  when: dehydrated_certs_directory.stat.isdir is not defined or (dehydrated_certs_directory.stat.isdir is defined and dehydrated_certs_directory.stat.isdir and dehydrated_certs_directory.stat.nlink < 3)
+  failed_when: (
+    generate_initial_cert.stdout is defined and
+    ('error' in generate_initial_cert.stdout
+    or 'Error' in generate_initial_cert.stdout
+    or 'Error' in generate_initial_cert.stderr)
+    )
+  notify: restart nginx
+
+- name: cron job for certificate renewal
+  ansible.builtin.copy:
+    src: files/etc/cron.weekly/dehydrated
+    dest: /etc/cron.weekly/dehydrated
+    owner: root 
+    group: root
+    mode: 0755
+
+- name: copy dehydrated sudoers file
+  ansible.builtin.copy:
+    src: files/etc/sudoers.d/dehydrated
+    dest: /etc/sudoers.d/dehydrated
+    owner: root
+    group: root
+    mode: 660

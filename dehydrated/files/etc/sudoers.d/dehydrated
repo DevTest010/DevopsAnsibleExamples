@@ -1,0 +1,5 @@
+Cmnd_Alias DEHYDRATED_HOOK_CMDS = \
+	/usr/bin/cp * * /etc/nginx/ssl/, \
+	/usr/bin/systemctl reload nginx
+
+dehydrated	ALL=(root)	NOPASSWD: DEHYDRATED_HOOK_CMDS

@@ -1,0 +1,28 @@
+---
+
+- name: install the tigera calico k8s operator
+  ansible.builtin.command:
+    cmd: kubectl create -f https://docs.projectcalico.org/manifests/tigera-operator.yaml
+
+# Source for the original calico custom resource used in steps below is
+#     https://docs.projectcalico.org/manifests/custom-resources.yaml. We
+#     have a edited version with our CIDR.
+
+- name: copy custom resource used for installing calico
+  ansible.builtin.copy:
+    src: files/etc/kubernetes/calico-custom-resources.yaml
+    dest: /etc/kubernetes/calico-custom-resources.yaml
+  
+- name: install calico with custom resource
+  ansible.builtin.command:
+    cmd: kubectl create -f /etc/kubernetes/calico-custom-resources.yaml
+
+- name: wait until node is in ready state
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  ansible.builtin.shell: |
+    kubectl get nodes {{ ansible_hostname }} --no-headers -o custom-columns=STATUS:status.conditions\[\?\(\@.type==\"Ready\"\)\].status
+  register: node_status
+  until: node_status.stdout == 'True'
+  delay: 10
+  retries: 30
